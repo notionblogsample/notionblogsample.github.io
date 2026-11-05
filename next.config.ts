@@ -33,6 +33,12 @@ const nextConfig: NextConfig = {
     imageSizes: [16, 32, 48, 64, 96, 128, 192, 256, 384],
   },
   trailingSlash: true,
+  // Notion 요청 제한을 빌드 전체에서 공유하므로 글을 한 번에 하나씩 생성합니다.
+  experimental: {
+    cpus: 1,
+    staticGenerationMaxConcurrency: 1,
+  },
+  staticPageGenerationTimeout: 180,
   turbopack: {
     root: process.cwd(),
   },

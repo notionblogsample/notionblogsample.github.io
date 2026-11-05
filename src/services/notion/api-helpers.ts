@@ -70,13 +70,23 @@ export async function notionFetch(
 ): Promise<Response> {
   const { apiKey, ...fetchOptions } = options;
 
-  return fetch(url, {
+  const request = {
     ...fetchOptions,
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Notion-Version': NOTION_CONFIG.API_VERSION,
       ...fetchOptions.headers,
     },
-  });
+  };
+
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(url, request);
+    if (response.status !== 429 || attempt === 2) return response;
+
+    // Retry the failed request after Notion's cooldown, without reloading the whole post.
+    const retryAfter = Number(response.headers.get('retry-after'));
+    const delayMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000;
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
 }
 

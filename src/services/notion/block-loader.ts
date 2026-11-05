@@ -9,6 +9,7 @@ import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoin
 import { withCache, CACHE_KEYS } from '@/lib/cache';
 import { NOTION_CONFIG, NOTION_ENDPOINTS, CACHE_TTL } from './constants';
 import { logger } from '@/lib/logger';
+import { notionFetch } from './api-helpers';
 
 /**
  * 블록 로더 옵션
@@ -67,7 +68,8 @@ export async function fetchBlocksRecursively(
           url.searchParams.append('start_cursor', startCursor);
         }
 
-        const blocksResponse = await fetch(url.toString(), {
+        const blocksResponse = await notionFetch(url.toString(), {
+          apiKey,
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
@@ -104,63 +106,61 @@ export async function fetchBlocksRecursively(
         }
       }
 
-      // 병렬 처리: has_children이 true인 블록의 자식을 병렬로 가져오기
-      await Promise.all(
-        blocks.map(async (block) => {
-          // synced_block 특별 처리
-          if (enableSyncedBlocks && block.type === 'synced_block' && 'type' in block) {
-            try {
-              const syncedBlock = (block as any).synced_block;
+      // 하위 블록을 순서대로 읽어 Notion 요청이 한꺼번에 몰리지 않도록 합니다.
+      for (const block of blocks) {
+        // synced_block 특별 처리
+        if (enableSyncedBlocks && block.type === 'synced_block' && 'type' in block) {
+          try {
+            const syncedBlock = (block as any).synced_block;
 
-              // 참조 블록인 경우 (synced_from이 있음)
-              if (syncedBlock?.synced_from?.block_id) {
-                const sourceBlockId = syncedBlock.synced_from.block_id;
-                // 원본 블록의 자식을 가져옴
-                const children = await fetchBlocksRecursively(sourceBlockId, options);
-                (block as any).children = children;
-              }
-              // 원본 블록인 경우 (synced_from이 null)
-              else if (block.has_children) {
-                const children = await fetchBlocksRecursively(block.id, options);
-                (block as any).children = children;
-              }
-            } catch (error) {
-              logger.warn(`[WARN] Failed to fetch synced_block children for ${block.id}:`, error);
+            // 참조 블록인 경우 (synced_from이 있음)
+            if (syncedBlock?.synced_from?.block_id) {
+              const sourceBlockId = syncedBlock.synced_from.block_id;
+              // 원본 블록의 자식을 가져옴
+              const children = await fetchBlocksRecursively(sourceBlockId, options);
+              (block as any).children = children;
             }
+            // 원본 블록인 경우 (synced_from이 null)
+            else if (block.has_children) {
+              const children = await fetchBlocksRecursively(block.id, options);
+              (block as any).children = children;
+            }
+          } catch (error) {
+            logger.warn(`[WARN] Failed to fetch synced_block children for ${block.id}:`, error);
           }
-          // 일반 블록의 자식 처리
-          else if (block.has_children && 'type' in block) {
-            const children = await fetchBlocksRecursively(block.id, options);
-            // 블록 타입에 따라 children 저장
-            const blockType = block.type;
-            const blockData = (block as Record<string, unknown>)[blockType];
+        }
+        // 일반 블록의 자식 처리
+        else if (block.has_children && 'type' in block) {
+          const children = await fetchBlocksRecursively(block.id, options);
+          // 블록 타입에 따라 children 저장
+          const blockType = block.type;
+          const blockData = (block as Record<string, unknown>)[blockType];
+          if (blockData && typeof blockData === 'object') {
+            (blockData as Record<string, unknown>).children = children;
+          }
+        }
+
+        // child_database 블록 처리
+        if (enableChildDatabases && block.type === 'child_database' && 'type' in block && notionClient) {
+          try {
+            // 데이터베이스 ID는 블록 ID와 동일
+            const databaseId = block.id;
+            const [databaseRows, propertyNames] = await Promise.all([
+              notionClient.queryDatabase(databaseId, 100),
+              notionClient.getDatabaseSchema(databaseId)
+            ]);
+
+            // 데이터베이스 데이터를 블록에 저장
+            const blockData = (block as Record<string, unknown>)[block.type];
             if (blockData && typeof blockData === 'object') {
-              (blockData as Record<string, unknown>).children = children;
+              (blockData as Record<string, unknown>).database_rows = databaseRows;
+              (blockData as Record<string, unknown>).property_names = propertyNames;
             }
+          } catch (error) {
+            logger.warn(`[WARN] Failed to fetch child_database data for ${block.id}:`, error);
           }
-
-          // child_database 블록 처리
-          if (enableChildDatabases && block.type === 'child_database' && 'type' in block && notionClient) {
-            try {
-              // 데이터베이스 ID는 블록 ID와 동일
-              const databaseId = block.id;
-              const [databaseRows, propertyNames] = await Promise.all([
-                notionClient.queryDatabase(databaseId, 100),
-                notionClient.getDatabaseSchema(databaseId)
-              ]);
-
-              // 데이터베이스 데이터를 블록에 저장
-              const blockData = (block as Record<string, unknown>)[block.type];
-              if (blockData && typeof blockData === 'object') {
-                (blockData as Record<string, unknown>).database_rows = databaseRows;
-                (blockData as Record<string, unknown>).property_names = propertyNames;
-              }
-            } catch (error) {
-              logger.warn(`[WARN] Failed to fetch child_database data for ${block.id}:`, error);
-            }
-          }
-        })
-      );
+        }
+      }
 
       return blocks;
     },

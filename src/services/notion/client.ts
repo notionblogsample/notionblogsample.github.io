@@ -7,7 +7,7 @@ import { notionRenderer } from './renderer';
 import { withCache, CACHE_KEYS } from '@/lib/cache';
 import { fetchBlocksRecursively as fetchBlocks } from './block-loader';
 import { NotionApiError, NotionErrorCode, isNotionApiError } from '@/lib/errors';
-import { withRetry } from './api-helpers';
+import { withRetry, notionFetch } from './api-helpers';
 import { NOTION_CONFIG, NOTION_ENDPOINTS, CACHE_TTL } from './constants';
 import { optimizeNotionImageUrl, IMAGE_SIZE } from '@/lib/image';
 import { logger } from '@/lib/logger';
@@ -184,9 +184,10 @@ export function createNotionClient(override?: { notion?: Client; databaseId?: st
         () => withRetry(async () => {
           try {
             // Notion 데이터베이스에서 첫 번째 행 가져오기
-            const response = await fetch(
+            const response = await notionFetch(
               `${NOTION_CONFIG.BASE_URL}/${NOTION_ENDPOINTS.databaseQuery(settingsDatabaseId)}`,
               {
+                apiKey,
                 method: 'POST',
                 headers: {
                   'Authorization': `Bearer ${apiKey}`,
@@ -285,9 +286,10 @@ export function createNotionClient(override?: { notion?: Client; databaseId?: st
                 requestBody.start_cursor = startCursor;
               }
 
-              const response = await fetch(
+              const response = await notionFetch(
                 `${NOTION_CONFIG.BASE_URL}/${NOTION_ENDPOINTS.databaseQuery(databaseId)}`,
                 {
+                  apiKey,
                   method: 'POST',
                   headers: {
                     'Authorization': `Bearer ${apiKey}`,
@@ -363,9 +365,10 @@ export function createNotionClient(override?: { notion?: Client; databaseId?: st
                 '$1-$2-$3-$4-$5'
               );
 
-              const pageResponse = await fetch(
+              const pageResponse = await notionFetch(
                 `${NOTION_CONFIG.BASE_URL}/${NOTION_ENDPOINTS.page(pageIdWithHyphens)}`,
                 {
+                  apiKey,
                   headers: {
                     'Authorization': `Bearer ${apiKey}`,
                     'Notion-Version': NOTION_CONFIG.API_VERSION,
@@ -438,9 +441,10 @@ export function createNotionClient(override?: { notion?: Client; databaseId?: st
             }
 
             // 일반 slug로 데이터베이스 쿼리
-            const response = await fetch(
+            const response = await notionFetch(
               `${NOTION_CONFIG.BASE_URL}/${NOTION_ENDPOINTS.databaseQuery(databaseId)}`,
               {
+                apiKey,
                 method: 'POST',
                 headers: {
                   'Authorization': `Bearer ${apiKey}`,
@@ -594,9 +598,10 @@ export function createNotionClient(override?: { notion?: Client; databaseId?: st
         () => withRetry(async () => {
           try {
             // 페이지 정보 가져오기
-            const pageResponse = await fetch(
+            const pageResponse = await notionFetch(
               `${NOTION_CONFIG.BASE_URL}/${NOTION_ENDPOINTS.page(aboutPageId)}`,
               {
+                apiKey,
                 method: 'GET',
                 headers: {
                   'Authorization': `Bearer ${apiKey}`,
@@ -678,9 +683,10 @@ export function createNotionClient(override?: { notion?: Client; databaseId?: st
         () => withRetry(async () => {
           try {
             // Notion 데이터베이스에서 첫 번째 행 가져오기
-            const response = await fetch(
+            const response = await notionFetch(
               `${NOTION_CONFIG.BASE_URL}/${NOTION_ENDPOINTS.databaseQuery(siteDatabaseId)}`,
               {
+                apiKey,
                 method: 'POST',
                 headers: {
                   'Authorization': `Bearer ${apiKey}`,
@@ -769,9 +775,10 @@ export function createNotionClient(override?: { notion?: Client; databaseId?: st
           try {
             // pageSize가 100 이하면 단일 요청으로 처리
             if (pageSize <= 100) {
-              const response = await fetch(
+              const response = await notionFetch(
                 `${NOTION_CONFIG.BASE_URL}/${NOTION_ENDPOINTS.databaseQuery(databaseId)}`,
                 {
+                  apiKey,
                   method: 'POST',
                   headers: {
                     'Authorization': `Bearer ${apiKey}`,
@@ -809,9 +816,10 @@ export function createNotionClient(override?: { notion?: Client; databaseId?: st
                 requestBody.start_cursor = startCursor;
               }
 
-              const response = await fetch(
+              const response = await notionFetch(
                 `${NOTION_CONFIG.BASE_URL}/${NOTION_ENDPOINTS.databaseQuery(databaseId)}`,
                 {
+                  apiKey,
                   method: 'POST',
                   headers: {
                     'Authorization': `Bearer ${apiKey}`,
@@ -873,9 +881,10 @@ export function createNotionClient(override?: { notion?: Client; databaseId?: st
         CACHE_KEYS.DATABASE_SCHEMA(databaseId),
         () => withRetry(async () => {
           try {
-            const response = await fetch(
+            const response = await notionFetch(
               `${NOTION_CONFIG.BASE_URL}/${NOTION_ENDPOINTS.database(databaseId)}`,
               {
+                apiKey,
                 method: 'GET',
                 headers: {
                   'Authorization': `Bearer ${apiKey}`,
